@@ -12,12 +12,13 @@ import HomePage from "@/pages/HomePage";
 import { Link } from 'react-router-dom'
 import Squares from "./Squares";
 import GooeyNav from "./GooeyNav";
-
+ // Asegúrate de importar tus estilos globales
 
 
 
 function App() {
   const navItems = [
+    { label: "Inicio", href: "/" },
     { label: "Crear evento", href: "/admin" },
     { label: "Votar", href: "/votar" },
     { label: "Resultados", href: "/resultados" },
@@ -35,7 +36,7 @@ function App() {
       </div>
 
       <div className="relative z-10 text-center">
-        <h1 className="text-4xl font-bold mb-8">👑 Votación Reina UMG</h1>
+        <h1 className="text-4xl font-bold mb-8">Votación Reina UMG</h1>
 
         <div style={{ height: "400px", position: "relative" }}>
           <GooeyNav
