@@ -36,7 +36,7 @@ function App() {
       </div>
 
       <div className="relative z-10 text-center">
-        <h1 className="text-4xl font-bold mb-8">Votación Reina UMG</h1>
+        <h1 className="text-4xl font-bold mb-8">Votación Señorita UMG</h1>
 
         <div style={{ height: "400px", position: "relative" }}>
           <GooeyNav
