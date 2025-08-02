@@ -9,25 +9,50 @@ import { Route } from "react-router-dom";
 import { BrowserRouter } from "react-router-dom";
 import { ProtectedRoute } from "./ProtectedRoute";
 import HomePage from "@/pages/HomePage";
+import { Link } from 'react-router-dom'
+import Squares from "./Squares";
+import GooeyNav from "./GooeyNav";
+
+
+
 
 function App() {
+  const navItems = [
+    { label: "Crear evento", href: "/admin" },
+    { label: "Votar", href: "/votar" },
+    { label: "Resultados", href: "/resultados" },
+  ];
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-white">
-      <div className="text-center space-y-4 px-4">
-        <h1 className="text-4xl font-bold sm:text-6xl drop-shadow-lg">
-          Votación Reina UMG 2025 👑
-        </h1>
-        <p className="text-xl sm:text-2xl font-light">
-          Bienvenido al sistema oficial de votación universitaria.
-        </p>
-        <div className="mt-6">
-          <button className="bg-white text-indigo-700 font-semibold px-6 py-3 rounded-2xl hover:bg-gray-200 transition shadow-lg">
-            Ingresar como Votante
-          </button>
+    <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-indigo-500 text-white overflow-hidden">
+      <div className="absolute inset-0 z-0">
+        <Squares
+          speed={0.5}
+          squareSize={40}
+          direction="diagonal"
+          borderColor="#271E37"
+          hoverFillColor="#222"
+        />
+      </div>
+
+      <div className="relative z-10 text-center">
+        <h1 className="text-4xl font-bold mb-8">👑 Votación Reina UMG</h1>
+
+        <div style={{ height: "400px", position: "relative" }}>
+          <GooeyNav
+            items={navItems}
+            particleCount={15}
+            particleDistances={[90, 10]}
+            particleR={100}
+            initialActiveIndex={0}
+            animationTime={600}
+            timeVariance={300}
+            colors={[1, 2, 3, 1, 2, 3, 1, 4]}
+          />
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default App
+
+export default App;
