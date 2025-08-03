@@ -1,15 +1,16 @@
-import { createContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect, useContext } from "react";
 import { supabase } from "@/supabaseClient";
 
 type AuthContextType = {
   user: any;
   isLoading: boolean;
+  isAuthenticated: boolean;
 };
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoading: true,
+  isAuthenticated: false,
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -17,26 +18,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const getUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      setUser(data.user || null);
+    const getSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      setUser(data?.session?.user || null);
       setIsLoading(false);
     };
 
-    getUser();
+    getSession();
 
-    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
+      setIsLoading(false);
     });
 
     return () => {
-      data.subscription.unsubscribe();
+      listener?.subscription?.unsubscribe();
     };
   }, []);
 
+  const isAuthenticated = !!user;
+
   return (
-    <AuthContext.Provider value={{ user, isLoading }}>
+    <AuthContext.Provider value={{ user, isLoading, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );
 };
+
+export const useAuth = () => useContext(AuthContext);

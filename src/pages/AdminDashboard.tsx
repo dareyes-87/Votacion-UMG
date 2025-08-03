@@ -1,68 +1,179 @@
-// src/pages/AdminDashboard.tsx
-import { useState } from 'react'
-import { supabase } from '../supabaseClient'
+import { useState } from 'react';
+import { supabase } from '../supabaseClient';
 
 function AdminDashboard() {
-  const [nombre, setNombre] = useState('')
-  const [candidata, setCandidata] = useState('')
-  const [votacionId, setVotacionId] = useState<number | null>(null)
+  const [nombre, setNombre] = useState('');
+  const [fechaInicio, setFechaInicio] = useState('');
+  const [fechaFin, setFechaFin] = useState('');
+  const [candidatas, setCandidatas] = useState([
+    { nombre: '', foto_url: '', facultad: '', file: null as File | null },
+  ]);
 
-  const crearVotacion = async () => {
-    const { data, error } = await supabase
-      .from('votaciones')
-      .insert({ nombre, activa: true })
-      .select()
-      .single()
+  const handleCandidataChange = (index: number, field: string, value: string | File) => {
+    const updated = [...candidatas];
+    if (field === 'file') {
+      updated[index].file = value as File;
+    } else {
+      updated[index][field] = value as string;
+    }
+    setCandidatas(updated);
+  };
 
-    if (error) return alert('Error al crear votación')
-    setVotacionId(data.id)
-    alert('Votación creada')
-  }
+  const agregarCandidata = () => {
+    setCandidatas([...candidatas, { nombre: '', foto_url: '', facultad: '', file: null }]);
+  };
 
-  const agregarCandidata = async () => {
-    if (!votacionId) return alert('Crea una votación primero')
+  const eliminarCandidata = (index: number) => {
+    const updated = candidatas.filter((_, i) => i !== index);
+    setCandidatas(updated);
+  };
 
-    const { error } = await supabase.from('candidatas').insert({
-      nombre: candidata,
-      votacion_id: votacionId,
-    })
+  const crearVotacionConCandidatas = async () => {
+    try {
+      // 1. Crear votación
+      const { data: votacion, error: errorVotacion } = await supabase
+        .from('votacion')
+        .insert({
+          nombre,
+          fecha_inicio: fechaInicio,
+          fecha_fin: fechaFin,
+          activa: true,
+        })
+        .select()
+        .single();
 
-    if (error) return alert('Error al agregar candidata')
-    alert('Candidata agregada')
-    setCandidata('')
-  }
+      if (errorVotacion) {
+        console.error('❌ Error al crear votación:', errorVotacion);
+        alert('Error al crear votación: ' + errorVotacion.message);
+        return;
+      }
+
+      // 2. Subir imágenes y obtener URLs
+      const candidatasConURL = await Promise.all(
+        candidatas.map(async (c, idx) => {
+          if (!c.file) throw new Error(`Falta la imagen de la candidata #${idx + 1}`);
+
+          const fileExt = c.file.name.split('.').pop();
+          const filePath = `candidata_${Date.now()}_${idx}.${fileExt}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('ftcandidata')
+            .upload(filePath, c.file);
+
+          if (uploadError) throw new Error(`Error al subir imagen: ${uploadError.message}`);
+
+          const { data: urlData } = supabase.storage
+            .from('ftcandidata')
+            .getPublicUrl(filePath);
+
+          return {
+            nombre: c.nombre,
+            facultad: c.facultad,
+            foto_url: urlData.publicUrl,
+            votacion_id: votacion.id,
+          };
+        })
+      );
+
+      console.log('✅ Candidatas con URL:', candidatasConURL);
+
+      // 3. Insertar candidatas
+      const { error: errorCandidatas } = await supabase
+        .from('candidata')
+        .insert(candidatasConURL);
+
+      if (errorCandidatas) {
+        console.error('❌ Error al insertar candidatas:', errorCandidatas);
+        alert('Error al agregar candidatas: ' + errorCandidatas.message);
+        return;
+      }
+
+      alert('✅ Votación y candidatas creadas con éxito');
+      setNombre('');
+      setFechaInicio('');
+      setFechaFin('');
+      setCandidatas([{ nombre: '', foto_url: '', facultad: '', file: null }]);
+    } catch (err: any) {
+      console.error('❌ Error general:', err);
+      alert('Ocurrió un error: ' + err.message);
+    }
+  };
 
   return (
-    <div className="max-w-xl mx-auto p-6 space-y-6">
-      <h1 className="text-3xl font-bold">Panel de Administrador</h1>
+    <div className="max-w-2xl mx-auto p-6 space-y-6 bg-white rounded shadow">
+      <h1 className="text-3xl font-bold mb-4">Crear nueva votación</h1>
 
-      <div>
-        <label>Nombre de la votación</label>
+      <div className="space-y-4">
         <input
-          className="w-full p-2 border"
+          className="w-full p-2 border rounded"
+          placeholder="Nombre de la votación"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
         />
-        <button onClick={crearVotacion} className="mt-2 bg-blue-500 text-white px-4 py-2 rounded">
-          Crear votación
-        </button>
+        <input
+          type="datetime-local"
+          className="w-full p-2 border rounded"
+          value={fechaInicio}
+          onChange={(e) => setFechaInicio(e.target.value)}
+        />
+        <input
+          type="datetime-local"
+          className="w-full p-2 border rounded"
+          value={fechaFin}
+          onChange={(e) => setFechaFin(e.target.value)}
+        />
       </div>
 
-      {votacionId && (
-        <div>
-          <label>Agregar candidata</label>
+      <h2 className="text-2xl font-bold mt-6">Candidatas</h2>
+      {candidatas.map((c, i) => (
+        <div key={i} className="border p-4 rounded space-y-2 bg-gray-50">
           <input
-            className="w-full p-2 border"
-            value={candidata}
-            onChange={(e) => setCandidata(e.target.value)}
+            className="w-full p-2 border rounded"
+            placeholder="Nombre"
+            value={c.nombre}
+            onChange={(e) => handleCandidataChange(i, 'nombre', e.target.value)}
           />
-          <button onClick={agregarCandidata} className="mt-2 bg-green-500 text-white px-4 py-2 rounded">
-            Agregar
+          <input
+            className="w-full p-2 border rounded"
+            placeholder="Facultad"
+            value={c.facultad}
+            onChange={(e) => handleCandidataChange(i, 'facultad', e.target.value)}
+          />
+          <input
+            type="file"
+            accept="image/*"
+            className="w-full p-2 border rounded"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleCandidataChange(i, 'file', file);
+            }}
+          />
+          <button
+            className="text-sm text-red-600 hover:underline"
+            onClick={() => eliminarCandidata(i)}
+          >
+            Eliminar
           </button>
         </div>
-      )}
+      ))}
+
+      <button
+        className="bg-gray-200 hover:bg-gray-300 text-black px-4 py-2 rounded"
+        onClick={agregarCandidata}
+      >
+        + Agregar otra candidata
+      </button>
+
+      <div className="mt-6">
+        <button
+          onClick={crearVotacionConCandidatas}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded"
+        >
+          Guardar votación y candidatas
+        </button>
+      </div>
     </div>
-  )
+  );
 }
 
-export default AdminDashboard
+export default AdminDashboard;

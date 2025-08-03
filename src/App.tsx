@@ -12,17 +12,48 @@ import HomePage from "@/pages/HomePage";
 import { Link } from 'react-router-dom'
 import Squares from "./Squares";
 import GooeyNav from "./GooeyNav";
- // Asegúrate de importar tus estilos globales
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import AuthModal from "@/components/AuthModal"; // el modal que haremos
+import { useEffect } from "react";
+
 
 
 
 function App() {
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated && showAuthModal) {
+      setShowAuthModal(false); // ✅ cerrar modal si ya está autenticado
+      navigate("/admin");
+    }
+  }, [isAuthenticated]);
+
+  console.log("Auth user:", user);
+  console.log("Authenticated:", isAuthenticated);
+
+
   const navItems = [
     { label: "Inicio", href: "/" },
-    { label: "Crear evento", href: "/admin" },
+    {
+      label: "Crear evento",
+      href: "#",
+      onClick: () => {
+        if (isAuthenticated) {
+          navigate("/admin");
+        } else {
+          setShowAuthModal(true);
+        }
+      },
+    },
     { label: "Votar", href: "/votar" },
     { label: "Resultados", href: "/resultados" },
   ];
+
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-indigo-500 text-white overflow-hidden">
       <div className="absolute inset-0 z-0">
@@ -51,6 +82,9 @@ function App() {
           />
         </div>
       </div>
+
+      {/* Modal para login/registro */}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
     </div>
   );
 }

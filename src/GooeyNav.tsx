@@ -5,6 +5,7 @@ import "./GooeyNav.css"; // ya lo estás haciendo correctamente
 interface GooeyNavItem {
   label: string;
   href: string;
+  onClick?: () => void; // ✅ Agregado
 }
 
 export interface GooeyNavProps {
@@ -331,7 +332,16 @@ const GooeyNav: React.FC<GooeyNavProps> = ({
               >
                 <a
                   href={item.href}
-                  onClick={(e) => handleClick(e, index)}
+                  onClick={(e) => {
+                      e.preventDefault(); // evita navegación por defecto
+                      handleClick(e, index); // animación y partículas
+
+                      if (item.onClick) {
+                        item.onClick(); // ✅ Ejecuta acción personalizada si existe
+                      } else {
+                        window.location.href = item.href; // ✅ fallback si no hay onClick
+                      }
+                    }}
                   onKeyDown={(e) => handleKeyDown(e, index)}
                   className="outline-none py-[0.6em] px-[1em] inline-block"
                 >

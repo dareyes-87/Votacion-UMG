@@ -1,12 +1,15 @@
 // src/main.tsx
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import App from './App'
-import AdminDashboard from './pages/AdminDashboard'
-import Votacion from './pages/Votacion'
-import ResultadosLive from './pages/ResultadosLive'
-import ReactDOM from 'react-dom/client'
-import './index.css'
-import Squares from './Squares';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import App from "./App";
+import AdminDashboard from "./pages/AdminDashboard";
+import Votacion from "./pages/Votacion";
+import ResultadosLive from "./pages/ResultadosLive";
+import Squares from "./Squares";
+import "./index.css";
+import { AuthProvider } from "@/context/AuthContext";
+
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -25,15 +28,20 @@ function Layout({ children }: { children: React.ReactNode }) {
   )
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <BrowserRouter>
-    <Layout>
-      <Routes>
-        <Route path="/" element={<App />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/votar" element={<Votacion />} />
-        <Route path="/resultados" element={<ResultadosLive />} />
-      </Routes>
-    </Layout>
-  </BrowserRouter>
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <AuthProvider>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<App />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/votar" element={<Votacion />} />
+            <Route path="/resultados" element={<ResultadosLive />} />
+          </Routes>
+        </Layout>
+      </AuthProvider>
+    </BrowserRouter>
+  </React.StrictMode>
 )
