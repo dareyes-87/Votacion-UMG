@@ -19,6 +19,7 @@ function AdminDashboard() {
     setCandidatas(updated);
   };
 
+
   const agregarCandidata = () => {
     setCandidatas([...candidatas, { nombre: '', foto_url: '', facultad: '', file: null }]);
   };
@@ -29,6 +30,8 @@ function AdminDashboard() {
   };
 
   const crearVotacionConCandidatas = async () => {
+    const userId = (await supabase.auth.getUser()).data.user?.id;
+
     try {
       // 1. Crear votación
       const { data: votacion, error: errorVotacion } = await supabase
@@ -38,6 +41,7 @@ function AdminDashboard() {
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
           activa: true,
+          created_by: userId,
         })
         .select()
         .single();
