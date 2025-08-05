@@ -1,3 +1,4 @@
+// src/pages/AdminDashboard.tsx
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
@@ -19,7 +20,6 @@ function AdminDashboard() {
     setCandidatas(updated);
   };
 
-
   const agregarCandidata = () => {
     setCandidatas([...candidatas, { nombre: '', foto_url: '', facultad: '', file: null }]);
   };
@@ -33,7 +33,6 @@ function AdminDashboard() {
     const userId = (await supabase.auth.getUser()).data.user?.id;
 
     try {
-      // 1. Crear votación
       const { data: votacion, error: errorVotacion } = await supabase
         .from('votacion')
         .insert({
@@ -47,12 +46,10 @@ function AdminDashboard() {
         .single();
 
       if (errorVotacion) {
-        console.error('❌ Error al crear votación:', errorVotacion);
         alert('Error al crear votación: ' + errorVotacion.message);
         return;
       }
 
-      // 2. Subir imágenes y obtener URLs
       const candidatasConURL = await Promise.all(
         candidatas.map(async (c, idx) => {
           if (!c.file) throw new Error(`Falta la imagen de la candidata #${idx + 1}`);
@@ -79,15 +76,11 @@ function AdminDashboard() {
         })
       );
 
-      console.log('✅ Candidatas con URL:', candidatasConURL);
-
-      // 3. Insertar candidatas
       const { error: errorCandidatas } = await supabase
         .from('candidata')
         .insert(candidatasConURL);
 
       if (errorCandidatas) {
-        console.error('❌ Error al insertar candidatas:', errorCandidatas);
         alert('Error al agregar candidatas: ' + errorCandidatas.message);
         return;
       }
@@ -98,31 +91,30 @@ function AdminDashboard() {
       setFechaFin('');
       setCandidatas([{ nombre: '', foto_url: '', facultad: '', file: null }]);
     } catch (err: any) {
-      console.error('❌ Error general:', err);
       alert('Ocurrió un error: ' + err.message);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6 bg-white rounded shadow">
-      <h1 className="text-3xl font-bold mb-4">Crear nueva votación</h1>
+    <div className="max-w-2xl mx-auto p-6 space-y-6 text-white bg-transparent">
+      <h1 className="text-3xl font-bold mb-4 text-white">Crear nueva votación</h1>
 
       <div className="space-y-4">
         <input
-          className="w-full p-2 border rounded"
+          className="w-full p-2 rounded bg-[#0A0014] text-white placeholder-gray-400 border border-white/20"
           placeholder="Nombre de la votación"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
         />
         <input
           type="datetime-local"
-          className="w-full p-2 border rounded"
+          className="w-full p-2 rounded bg-[#0A0014] text-white border border-white/20"
           value={fechaInicio}
           onChange={(e) => setFechaInicio(e.target.value)}
         />
         <input
           type="datetime-local"
-          className="w-full p-2 border rounded"
+          className="w-full p-2 rounded bg-[#0A0014] text-white border border-white/20"
           value={fechaFin}
           onChange={(e) => setFechaFin(e.target.value)}
         />
@@ -130,15 +122,15 @@ function AdminDashboard() {
 
       <h2 className="text-2xl font-bold mt-6">Candidatas</h2>
       {candidatas.map((c, i) => (
-        <div key={i} className="border p-4 rounded space-y-2 bg-gray-50">
+        <div key={i} className="border border-white/20 p-4 rounded space-y-2 bg-[#0A0014]">
           <input
-            className="w-full p-2 border rounded"
+            className="w-full p-2 rounded bg-[#1E1B2E] text-white placeholder-gray-400 border border-white/10"
             placeholder="Nombre"
             value={c.nombre}
             onChange={(e) => handleCandidataChange(i, 'nombre', e.target.value)}
           />
           <input
-            className="w-full p-2 border rounded"
+            className="w-full p-2 rounded bg-[#1E1B2E] text-white placeholder-gray-400 border border-white/10"
             placeholder="Facultad"
             value={c.facultad}
             onChange={(e) => handleCandidataChange(i, 'facultad', e.target.value)}
@@ -146,14 +138,14 @@ function AdminDashboard() {
           <input
             type="file"
             accept="image/*"
-            className="w-full p-2 border rounded"
+            className="w-full p-2 rounded bg-[#1E1B2E] text-white border border-white/10"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) handleCandidataChange(i, 'file', file);
             }}
           />
           <button
-            className="text-sm text-red-600 hover:underline"
+            className="text-sm text-red-400 hover:underline"
             onClick={() => eliminarCandidata(i)}
           >
             Eliminar
@@ -162,7 +154,7 @@ function AdminDashboard() {
       ))}
 
       <button
-        className="bg-gray-200 hover:bg-gray-300 text-black px-4 py-2 rounded"
+        className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded"
         onClick={agregarCandidata}
       >
         + Agregar otra candidata

@@ -90,7 +90,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Add form */}
-          <div className="px-6 py-5 border-b border-gray-100">
+          <div className="px-6 py-5 border-b">
             <form onSubmit={handleSubmit(onSubmit)}>
               <div className="flex flex-col md:flex-row gap-2">
                 <textarea

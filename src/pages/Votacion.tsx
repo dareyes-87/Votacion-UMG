@@ -63,13 +63,13 @@ function Votacion() {
       </button>
       <button
         onClick={() => emitirVoto('blanco')}
-        className="bg-gray-300 text-black w-full py-2 rounded-md"
+        className="text-black w-full py-2 rounded-md"
       >
         Votar en blanco
       </button>
       <button
         onClick={() => emitirVoto('nulo')}
-        className="bg-red-500 text-white w-full py-2 rounded-md"
+        className="text-white w-full py-2 rounded-md"
       >
         Voto nulo
       </button>
