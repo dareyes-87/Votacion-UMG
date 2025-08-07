@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import { supabase } from '../supabaseClient';
 import Swal from 'sweetalert2';
-import CircularGallery from '../components/CircularGallery';
 
 interface Candidata {
   id: number;
@@ -18,8 +17,8 @@ function Votacion() {
   const [visitorId, setVisitorId] = useState<string | null>(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [candidatas, setCandidatas] = useState<Candidata[]>([]);
-  const [loading, setLoading] = useState(true);
   const [seleccionada, setSeleccionada] = useState<Candidata | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadFingerprint = async () => {
@@ -44,7 +43,7 @@ function Votacion() {
     fetchCandidatas();
   }, [id]);
 
-  const emitirVoto = async () => {
+  const emitirVoto = async (candidataId: number | null) => {
     if (!visitorId || !id) return;
 
     const { data: votosPrevios } = await supabase
@@ -60,10 +59,8 @@ function Votacion() {
     }
 
     const confirmacion = await Swal.fire({
-      title: seleccionada ? `¿Votar por ${seleccionada.nombre}?` : '¿Votar en blanco?',
-      text: seleccionada
-        ? 'Tu elección será registrada.'
-        : 'Estás enviando un voto en blanco.',
+      title: candidataId ? `¿Confirmar tu voto por ${seleccionada?.nombre}?` : '¿Votar en blanco?',
+      text: candidataId ? 'Tu elección será registrada.' : 'Estás enviando un voto en blanco.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Sí, votar',
@@ -74,8 +71,8 @@ function Votacion() {
 
     const { error } = await supabase.from('voto').insert({
       votacion_id: Number(id),
-      candidata_id: seleccionada?.id ?? null,
-      voto_blanco: seleccionada === null,
+      candidata_id: candidataId,
+      voto_blanco: candidataId === null,
       dispositivo_hash: visitorId,
     });
 
@@ -87,44 +84,63 @@ function Votacion() {
     }
   };
 
-  if (loading || !visitorId)
-    return <p className="text-center p-8 text-white">Cargando...</p>;
-
+  if (loading || !visitorId) return <p className="text-center p-8 text-white">Cargando...</p>;
   if (hasVoted)
     return <p className="text-center p-8 text-white">Este dispositivo ya fue utilizado para votar.</p>;
 
-  const items = candidatas.map((c) => ({
-    image: c.foto_url,
-    text: c.nombre,
-    onClick: () => setSeleccionada(c),
-  }));
-
   return (
-    <div className="w-full h-[90vh] relative text-white">
-      <h1 className="text-3xl text-center font-bold mb-6">Vota por tu candidata 👑</h1>
+    <div className="min-h-screen pb-28 px-4 pt-6 text-white max-w-3xl mx-auto">
+      <h1 className="text-3xl font-bold text-center mb-6">Vota por tu candidata 👑</h1>
 
-      <div className="w-full h-[500px] relative">
-        <CircularGallery items={items} />
+      <div className="grid gap-4">
+        {candidatas.map((c) => {
+          const esSeleccionada = seleccionada?.id === c.id;
+          return (
+            <div
+              key={c.id}
+              onClick={() => setSeleccionada(c)}
+              className={`cursor-pointer bg-white/10 rounded-lg shadow text-white flex flex-col sm:flex-row items-center transition border-2 ${
+                esSeleccionada ? 'border-indigo-500' : 'border-transparent'
+              } p-4`}
+            >
+              <img
+                src={c.foto_url}
+                alt={c.nombre}
+                className="w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 object-cover rounded-lg"
+              />
+              <div className="sm:ml-6 mt-4 sm:mt-0 text-center sm:text-left">
+                <h3 className="text-2xl sm:text-3xl font-semibold">{c.nombre}</h3>
+                {esSeleccionada && (
+                  <span className="text-sm text-indigo-300 block mt-1">Seleccionada</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      <div className="absolute bottom-4 w-full flex flex-col items-center gap-3">
-        <p className="text-lg">
+      {/* Botones fijos en la parte inferior */}
+      <div className="fixed bottom-0 left-0 right-0 bg-[#130e1d] px-4 py-4 border-t border-gray-700 flex flex-col items-center gap-2 z-50">
+        <div className="text-white text-sm">
           {seleccionada
-            ? `Seleccionaste: ${seleccionada.nombre}`
+            ? `Has seleccionado: ${seleccionada.nombre}`
             : 'Selecciona una candidata o vota en blanco'}
-        </p>
-
+        </div>
         <div className="flex gap-4">
           <button
-            onClick={() => setSeleccionada(null)}
-            className="bg-gray-500 hover:bg-gray-600 py-2 px-4 rounded text-white"
+            onClick={() => emitirVoto(null)}
+            className="bg-gray-700 hover:bg-gray-800 py-2 px-4 rounded text-white text-lg"
           >
             Votar en blanco
           </button>
           <button
-            onClick={emitirVoto}
-            className="bg-green-600 hover:bg-green-700 py-2 px-4 rounded text-white"
-            disabled={seleccionada === null}
+            onClick={() => emitirVoto(seleccionada?.id ?? null)}
+            disabled={!seleccionada}
+            className={`py-2 px-4 rounded text-white text-lg ${
+              seleccionada
+                ? 'bg-indigo-600 hover:bg-indigo-700'
+                : 'bg-indigo-900 opacity-50 cursor-not-allowed'
+            }`}
           >
             Confirmar voto
           </button>
@@ -135,5 +151,3 @@ function Votacion() {
 }
 
 export default Votacion;
-
-
