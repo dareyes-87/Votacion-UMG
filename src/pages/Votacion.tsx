@@ -20,6 +20,30 @@ function Votacion() {
   const [seleccionada, setSeleccionada] = useState<Candidata | null>(null);
   const [loading, setLoading] = useState(true);
   const [votacionActiva, setVotacionActiva] = useState(true);
+  const [verificandoVoto, setVerificandoVoto] = useState(true);
+
+
+  // Verificar si ya votó (cuando visitorId esté disponible)
+useEffect(() => {
+  const verificarSiYaVoto = async () => {
+    if (!visitorId || !id) return;
+
+    const { data: votosPrevios, error } = await supabase
+      .from('voto')
+      .select('id')
+      .eq('dispositivo_hash', visitorId)
+      .eq('votacion_id', id);
+
+    if (!error && votosPrevios && votosPrevios.length > 0) {
+      setHasVoted(true);
+    }
+
+    setVerificandoVoto(false);
+  };
+
+  verificarSiYaVoto();
+}, [visitorId, id]);
+
 
   // Obtener fingerprint del dispositivo
   useEffect(() => {
@@ -108,21 +132,42 @@ function Votacion() {
 
     if (error) {
       console.error("Error al emitir voto:", error.message);
-      Swal.fire('❌ Error', `Ocurrió un error: ${error.message}`, 'error');
+      //Swal.fire('❌ Ya has votado', `Ocurrió un error: ${error.message}`, 'error');
+      Swal.fire('❌ Ya has votado', `Ya has votado desde este dispositivo`, 'error');
     } else {
       setHasVoted(true);
-      Swal.fire('✅ ¡Gracias por votar!', '', 'success');
+      Swal.fire({
+        title: '✅ ¡Gracias por votar!',
+        text: 'Tu voto ha sido registrado correctamente.',
+        icon: 'success',
+        confirmButtonText: 'Ver resultados',
+      }).then((res) => {
+        if (res.isConfirmed) {
+          window.location.href = `/resultados?votacion_id=${id}`;
+        }
+      });
+
     }
   };
-
-  if (loading || !visitorId)
-    return <p className="text-center p-8 text-white">Cargando...</p>;
 
   if (!votacionActiva)
     return <p className="text-center p-8 text-white">Esta votación ha finalizado o aún no ha comenzado.</p>;
 
   if (hasVoted)
-    return <p className="text-center p-8 text-white">Este dispositivo ya fue utilizado para votar.</p>;
+    return (
+      <div className="text-center p-8 text-white space-y-4">
+        <p className="text-xl font-semibold">✅ Este dispositivo ya ha votado.</p>
+        <button
+          onClick={() => {
+            window.location.href = `/resultados?votacion_id=${id}`;
+          }}
+          className="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded text-white text-lg"
+        >
+          Ver resultados
+        </button>
+      </div>
+    );
+
 
   return (
     <div className="min-h-screen pb-28 px-4 pt-6 text-white max-w-3xl mx-auto">
