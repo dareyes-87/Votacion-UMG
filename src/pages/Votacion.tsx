@@ -19,7 +19,9 @@ function Votacion() {
   const [candidatas, setCandidatas] = useState<Candidata[]>([]);
   const [seleccionada, setSeleccionada] = useState<Candidata | null>(null);
   const [loading, setLoading] = useState(true);
+  const [votacionActiva, setVotacionActiva] = useState(true);
 
+  // Obtener fingerprint del dispositivo
   useEffect(() => {
     const loadFingerprint = async () => {
       const fp = await FingerprintJS.load();
@@ -29,6 +31,31 @@ function Votacion() {
     loadFingerprint();
   }, []);
 
+  // Verificar si votación está dentro del rango de fechas
+  useEffect(() => {
+    const verificarTiempoDeVotacion = async () => {
+      if (!id) return;
+      const { data, error } = await supabase
+        .from('votacion')
+        .select('fecha_inicio, fecha_fin')
+        .eq('id', id)
+        .single();
+
+      if (error || !data) {
+        setVotacionActiva(false);
+        return;
+      }
+
+      const ahora = new Date();
+      const inicio = new Date(data.fecha_inicio);
+      const fin = new Date(data.fecha_fin);
+      setVotacionActiva(ahora >= inicio && ahora <= fin);
+    };
+
+    verificarTiempoDeVotacion();
+  }, [id]);
+
+  // Obtener candidatas
   useEffect(() => {
     const fetchCandidatas = async () => {
       if (!id) return;
@@ -43,9 +70,11 @@ function Votacion() {
     fetchCandidatas();
   }, [id]);
 
+  // Emitir voto
   const emitirVoto = async (candidataId: number | null) => {
     if (!visitorId || !id) return;
 
+    // Verificar si ya votó
     const { data: votosPrevios } = await supabase
       .from('voto')
       .select('*')
@@ -73,18 +102,25 @@ function Votacion() {
       votacion_id: Number(id),
       candidata_id: candidataId,
       voto_blanco: candidataId === null,
+      voto_nulo: false,
       dispositivo_hash: visitorId,
     });
 
     if (error) {
-      Swal.fire('❌ Error', 'Ocurrió un error al emitir tu voto.', 'error');
+      console.error("Error al emitir voto:", error.message);
+      Swal.fire('❌ Error', `Ocurrió un error: ${error.message}`, 'error');
     } else {
       setHasVoted(true);
       Swal.fire('✅ ¡Gracias por votar!', '', 'success');
     }
   };
 
-  if (loading || !visitorId) return <p className="text-center p-8 text-white">Cargando...</p>;
+  if (loading || !visitorId)
+    return <p className="text-center p-8 text-white">Cargando...</p>;
+
+  if (!votacionActiva)
+    return <p className="text-center p-8 text-white">Esta votación ha finalizado o aún no ha comenzado.</p>;
+
   if (hasVoted)
     return <p className="text-center p-8 text-white">Este dispositivo ya fue utilizado para votar.</p>;
 
