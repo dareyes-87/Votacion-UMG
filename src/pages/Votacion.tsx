@@ -14,7 +14,8 @@ interface Candidata {
 function Votacion() {
   const [searchParams] = useSearchParams();
   const id = searchParams.get('votacion_id');
-  const [visitorId, setVisitorId] = useState<string | null>(null);
+  const [fpId, setFpId] = useState<string | null>(null);
+  const [deviceId, setDeviceId] = useState<string | null>(null);   // <- nuevo
   const [hasVoted, setHasVoted] = useState(false);
   const [candidatas, setCandidatas] = useState<Candidata[]>([]);
   const [seleccionada, setSeleccionada] = useState<Candidata | null>(null);
@@ -22,38 +23,39 @@ function Votacion() {
   const [votacionActiva, setVotacionActiva] = useState(true);
   const [verificandoVoto, setVerificandoVoto] = useState(true);
 
-
-  // Verificar si ya votó (cuando visitorId esté disponible)
+  // Verificar si ya votó (cuando fpId y deviceId estén disponibles)
 useEffect(() => {
-  const verificarSiYaVoto = async () => {
-    if (!visitorId || !id) return;
-
-    const { data: votosPrevios, error } = await supabase
-      .from('voto')
-      .select('id')
-      .eq('dispositivo_hash', visitorId)
-      .eq('votacion_id', id);
-
-    if (!error && votosPrevios && votosPrevios.length > 0) {
-      setHasVoted(true);
+    try {
+      let token = localStorage.getItem('device_token');
+      if (!token) {
+        token = crypto.randomUUID(); // o usa nanoid si prefieres
+        localStorage.setItem('device_token', token);
+      }
+      setDeviceId(token);
+    } catch {
+      // si localStorage falla (modo incógnito muy agresivo), crea uno volatile
+      setDeviceId(`volatile-${Math.random().toString(36).slice(2)}`);
     }
-
-    setVerificandoVoto(false);
-  };
-
-  verificarSiYaVoto();
-}, [visitorId, id]);
+  }, []);
 
 
   // Obtener fingerprint del dispositivo
   useEffect(() => {
     const loadFingerprint = async () => {
-      const fp = await FingerprintJS.load();
-      const result = await fp.get();
-      setVisitorId(result.visitorId);
+      try {
+        const fp = await FingerprintJS.load();
+        const result = await fp.get();
+        setFpId(result.visitorId);
+      } catch (e) {
+        console.warn('FingerprintJS falló o está bloqueado:', e);
+        setFpId(null);
+      }
     };
     loadFingerprint();
   }, []);
+
+  const dispositivo_hash = deviceId && fpId ? `${deviceId}:${fpId}`
+                        : deviceId ?? fpId ?? null;
 
   // Verificar si votación está dentro del rango de fechas
   useEffect(() => {
@@ -62,20 +64,16 @@ useEffect(() => {
       const { data, error } = await supabase
         .from('votacion')
         .select('fecha_inicio, fecha_fin')
-        .eq('id', id)
+        .eq('id', Number(id))
         .single();
 
       if (error || !data) {
         setVotacionActiva(false);
         return;
       }
-
       const ahora = new Date();
-      const inicio = new Date(data.fecha_inicio);
-      const fin = new Date(data.fecha_fin);
-      setVotacionActiva(ahora >= inicio && ahora <= fin);
+      setVotacionActiva(ahora >= new Date(data.fecha_inicio) && ahora <= new Date(data.fecha_fin));
     };
-
     verificarTiempoDeVotacion();
   }, [id]);
 
@@ -86,32 +84,50 @@ useEffect(() => {
       const { data, error } = await supabase
         .from('candidata')
         .select('*')
-        .eq('votacion_id', id);
-
-      if (!error) setCandidatas(data as Candidata[]);
+        .eq('votacion_id', Number(id));
+      if (!error && data) setCandidatas(data as Candidata[]);
       setLoading(false);
     };
     fetchCandidatas();
   }, [id]);
 
+  // 5) Verificar si ya votó (cuando tengamos el hash listo)
+  useEffect(() => {
+      const verificar = async () => {
+        if (!dispositivo_hash || !id) return;
+        const { data, error } = await supabase
+          .from('voto')
+          .select('id', { count: 'exact' })
+          .eq('dispositivo_hash', dispositivo_hash)
+          .eq('votacion_id', Number(id));
+
+        if (!error && data && data.length > 0) setHasVoted(true);
+        setVerificandoVoto(false);
+      };
+      verificar();
+    }, [dispositivo_hash, id]);
+
   // Emitir voto
   const emitirVoto = async (candidataId: number | null) => {
-    if (!visitorId || !id) return;
+    if (!dispositivo_hash || !id) {
+      Swal.fire('Error', 'No se pudo identificar el dispositivo. Intenta refrescar.', 'error');
+      return;
+    }
 
-    // Verificar si ya votó
-    const { data: votosPrevios } = await supabase
+  // Doble-check
+    const { data: prev } = await supabase
       .from('voto')
-      .select('*')
-      .eq('dispositivo_hash', visitorId)
-      .eq('votacion_id', id);
-
-    if (votosPrevios && votosPrevios.length > 0) {
+      .select('id')
+      .eq('dispositivo_hash', dispositivo_hash)
+      .eq('votacion_id', Number(id));
+    if (prev && prev.length > 0) {
       setHasVoted(true);
       Swal.fire('🛑 Ya has votado', 'Este dispositivo ya fue utilizado para votar.', 'warning');
       return;
     }
 
-    const confirmacion = await Swal.fire({
+
+  const confirmacion = await Swal.fire({
       title: candidataId ? `¿Confirmar tu voto por ${seleccionada?.nombre}?` : '¿Votar en blanco?',
       text: candidataId ? 'Tu elección será registrada.' : 'Estás enviando un voto en blanco.',
       icon: 'question',
@@ -119,35 +135,34 @@ useEffect(() => {
       confirmButtonText: 'Sí, votar',
       cancelButtonText: 'Cancelar',
     });
-
     if (!confirmacion.isConfirmed) return;
+
 
     const { error } = await supabase.from('voto').insert({
       votacion_id: Number(id),
       candidata_id: candidataId,
       voto_blanco: candidataId === null,
       voto_nulo: false,
-      dispositivo_hash: visitorId,
+      dispositivo_hash, // <- siempre el mismo valor usado en el check anterior
     });
 
     if (error) {
-      console.error("Error al emitir voto:", error.message);
-      //Swal.fire('❌ Ya has votado', `Ocurrió un error: ${error.message}`, 'error');
-      Swal.fire('❌ Ya has votado', `Ya has votado desde este dispositivo`, 'error');
-    } else {
-      setHasVoted(true);
-      Swal.fire({
-        title: '✅ ¡Gracias por votar!',
-        text: 'Tu voto ha sido registrado correctamente.',
-        icon: 'success',
-        confirmButtonText: 'Ver resultados',
-      }).then((res) => {
-        if (res.isConfirmed) {
-          window.location.href = `/resultados?votacion_id=${id}`;
-        }
-      });
-
+      console.error('Insert voto error:', error);
+      Swal.fire('❌ Error', `No se pudo registrar el voto: ${error.message}`, 'error');
+      return;
     }
+
+setHasVoted(true);
+    Swal.fire({
+      title: '✅ ¡Gracias por votar!',
+      text: 'Tu voto ha sido registrado correctamente.',
+      icon: 'success',
+      confirmButtonText: 'Ver resultados',
+    }).then((res) => {
+      if (res.isConfirmed) {
+        window.location.href = `/resultados?votacion_id=${id}`;
+      }
+    });
   };
 
   if (!votacionActiva)
