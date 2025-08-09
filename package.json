@@ -15,6 +15,7 @@
     "@tailwindcss/vite": "^4.1.7",
     "@tanstack/react-query": "^5.76.1",
     "gsap": "^3.13.0",
+    "html5-qrcode": "^2.3.8",
     "ogl": "^1.0.11",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",

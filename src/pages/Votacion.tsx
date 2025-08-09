@@ -1,3 +1,4 @@
+// src/pages/Votacion.tsx
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
@@ -14,8 +15,12 @@ interface Candidata {
 function Votacion() {
   const [searchParams] = useSearchParams();
   const id = searchParams.get('votacion_id');
+
+  // Estados de identificación del dispositivo
   const [fpId, setFpId] = useState<string | null>(null);
-  const [deviceId, setDeviceId] = useState<string | null>(null);   // <- nuevo
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+
+  // Estados de UI / datos
   const [hasVoted, setHasVoted] = useState(false);
   const [candidatas, setCandidatas] = useState<Candidata[]>([]);
   const [seleccionada, setSeleccionada] = useState<Candidata | null>(null);
@@ -23,23 +28,88 @@ function Votacion() {
   const [votacionActiva, setVotacionActiva] = useState(true);
   const [verificandoVoto, setVerificandoVoto] = useState(true);
 
-  // Verificar si ya votó (cuando fpId y deviceId estén disponibles)
-useEffect(() => {
+  // Estados para pantalla sin votacion_id (QR / manual)
+  const [showScanner, setShowScanner] = useState(false);
+  const [manualInput, setManualInput] = useState('');
+
+  // ===== Helpers para flujo sin ID =====
+  function extractVotacionId(text: string): number | null {
+    if (!text) return null;
+    // número directo
+    const asNum = Number(text.trim());
+    if (!Number.isNaN(asNum) && asNum > 0) return asNum;
+
+    // URL con query
+    try {
+      const url = new URL(text);
+      const fromQuery = url.searchParams.get('votacion_id');
+      if (fromQuery && !Number.isNaN(Number(fromQuery))) return Number(fromQuery);
+    } catch {
+      // no era URL; intentar encontrar votacion_id=NNN en texto
+      const m = text.match(/votacion_id=(\d+)/i);
+      if (m) return Number(m[1]);
+    }
+    return null;
+  }
+
+  async function startScanner() {
+    setShowScanner(true);
+    if (typeof window === 'undefined') return;
+    try {
+      const { Html5Qrcode } = await import('html5-qrcode'); // npm i html5-qrcode
+      const elementId = 'qr-reader';
+
+      setTimeout(async () => {
+        const html5QrCode = new Html5Qrcode(elementId);
+        const config = { fps: 10, qrbox: 250 };
+        try {
+          await html5QrCode.start(
+            { facingMode: 'environment' },
+            config,
+            (decodedText: string) => {
+              const vid = extractVotacionId(decodedText);
+              if (vid) {
+                html5QrCode.stop().then(() => {
+                  window.location.href = `/votar?votacion_id=${vid}`;
+                });
+              }
+            }
+          );
+          (window as any).__qrInstance = html5QrCode;
+        } catch (e) {
+          console.error('No se pudo iniciar la cámara/QR:', e);
+          Swal.fire('Permiso requerido', 'No se pudo acceder a la cámara.', 'warning');
+          setShowScanner(false);
+        }
+      }, 0);
+    } catch (e) {
+      console.error('Error cargando html5-qrcode:', e);
+      Swal.fire('Error', 'No se pudo iniciar el lector QR.', 'error');
+      setShowScanner(false);
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      const inst = (window as any).__qrInstance;
+      if (inst) inst.stop().catch(() => {});
+    };
+  }, []);
+
+  // ===== Identificación del dispositivo (token local + Fingerprint opcional) =====
+  useEffect(() => {
     try {
       let token = localStorage.getItem('device_token');
       if (!token) {
-        token = crypto.randomUUID(); // o usa nanoid si prefieres
+        token = crypto.randomUUID();
         localStorage.setItem('device_token', token);
       }
       setDeviceId(token);
     } catch {
-      // si localStorage falla (modo incógnito muy agresivo), crea uno volatile
       setDeviceId(`volatile-${Math.random().toString(36).slice(2)}`);
     }
   }, []);
 
-
-  // Obtener fingerprint del dispositivo
   useEffect(() => {
     const loadFingerprint = async () => {
       try {
@@ -54,10 +124,10 @@ useEffect(() => {
     loadFingerprint();
   }, []);
 
-  const dispositivo_hash = deviceId && fpId ? `${deviceId}:${fpId}`
-                        : deviceId ?? fpId ?? null;
+  const dispositivo_hash =
+    deviceId && fpId ? `${deviceId}:${fpId}` : deviceId ?? fpId ?? null;
 
-  // Verificar si votación está dentro del rango de fechas
+  // ===== Verificar ventana de tiempo de la votación =====
   useEffect(() => {
     const verificarTiempoDeVotacion = async () => {
       if (!id) return;
@@ -72,12 +142,14 @@ useEffect(() => {
         return;
       }
       const ahora = new Date();
-      setVotacionActiva(ahora >= new Date(data.fecha_inicio) && ahora <= new Date(data.fecha_fin));
+      setVotacionActiva(
+        ahora >= new Date(data.fecha_inicio) && ahora <= new Date(data.fecha_fin)
+      );
     };
     verificarTiempoDeVotacion();
   }, [id]);
 
-  // Obtener candidatas
+  // ===== Obtener candidatas =====
   useEffect(() => {
     const fetchCandidatas = async () => {
       if (!id) return;
@@ -91,30 +163,30 @@ useEffect(() => {
     fetchCandidatas();
   }, [id]);
 
-  // 5) Verificar si ya votó (cuando tengamos el hash listo)
+  // ===== Verificar si ya votó este dispositivo =====
   useEffect(() => {
-      const verificar = async () => {
-        if (!dispositivo_hash || !id) return;
-        const { data, error } = await supabase
-          .from('voto')
-          .select('id', { count: 'exact' })
-          .eq('dispositivo_hash', dispositivo_hash)
-          .eq('votacion_id', Number(id));
+    const verificar = async () => {
+      if (!dispositivo_hash || !id) return;
+      const { data, error } = await supabase
+        .from('voto')
+        .select('id', { count: 'exact' })
+        .eq('dispositivo_hash', dispositivo_hash)
+        .eq('votacion_id', Number(id));
 
-        if (!error && data && data.length > 0) setHasVoted(true);
-        setVerificandoVoto(false);
-      };
-      verificar();
-    }, [dispositivo_hash, id]);
+      if (!error && data && data.length > 0) setHasVoted(true);
+      setVerificandoVoto(false);
+    };
+    verificar();
+  }, [dispositivo_hash, id]);
 
-  // Emitir voto
+  // ===== Emitir voto =====
   const emitirVoto = async (candidataId: number | null) => {
     if (!dispositivo_hash || !id) {
-      Swal.fire('Error', 'No se pudo identificar el dispositivo. Intenta refrescar.', 'error');
+      Swal.fire('Error', 'No se pudo identificar el dispositivo o falta el ID.', 'error');
       return;
     }
 
-  // Doble-check
+    // Doble-check cliente (puedes eliminar cuando migres a RPC)
     const { data: prev } = await supabase
       .from('voto')
       .select('id')
@@ -126,8 +198,7 @@ useEffect(() => {
       return;
     }
 
-
-  const confirmacion = await Swal.fire({
+    const confirmacion = await Swal.fire({
       title: candidataId ? `¿Confirmar tu voto por ${seleccionada?.nombre}?` : '¿Votar en blanco?',
       text: candidataId ? 'Tu elección será registrada.' : 'Estás enviando un voto en blanco.',
       icon: 'question',
@@ -137,13 +208,12 @@ useEffect(() => {
     });
     if (!confirmacion.isConfirmed) return;
 
-
     const { error } = await supabase.from('voto').insert({
       votacion_id: Number(id),
       candidata_id: candidataId,
       voto_blanco: candidataId === null,
       voto_nulo: false,
-      dispositivo_hash, // <- siempre el mismo valor usado en el check anterior
+      dispositivo_hash,
     });
 
     if (error) {
@@ -152,7 +222,7 @@ useEffect(() => {
       return;
     }
 
-setHasVoted(true);
+    setHasVoted(true);
     Swal.fire({
       title: '✅ ¡Gracias por votar!',
       text: 'Tu voto ha sido registrado correctamente.',
@@ -165,9 +235,91 @@ setHasVoted(true);
     });
   };
 
-  if (!votacionActiva)
-    return <p className="text-center p-8 text-white">Esta votación ha finalizado o aún no ha comenzado.</p>;
+  // ===== Vista cuando NO hay votacion_id (entrada con QR o manual) =====
+  if (!id) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 text-white text-center space-y-6">
+        <h1 className="text-3xl font-bold">Vota por tu candidata 👑</h1>
+        <p className="opacity-80">Escanea el código QR del evento o pega el enlace/ID para continuar.</p>
 
+        <div className="flex flex-col gap-3 w-full max-w-md">
+          <button
+            onClick={startScanner}
+            className="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded text-white text-lg"
+          >
+            Escanear QR
+          </button>
+
+          {showScanner && (
+            <div className="rounded-lg overflow-hidden border border-white/20">
+              <div id="qr-reader" className="w-full h-[320px] bg-black/40" />
+            </div>
+          )}
+
+          <div className="text-left">
+            <label className="block text-sm mb-1 opacity-80">Pegar enlace o ID de votación</label>
+            <input
+              value={manualInput}
+              onChange={(e) => setManualInput(e.target.value)}
+              placeholder="Ej. https://.../votar?votacion_id=123 o 123"
+              className="w-full px-3 py-2 rounded bg-white/10 border border-white/20 focus:outline-none"
+            />
+            <button
+              onClick={() => {
+                const vid = extractVotacionId(manualInput);
+                if (!vid) {
+                  Swal.fire('Dato inválido', 'Ingresa un enlace o ID válido.', 'warning');
+                  return;
+                }
+                window.location.href = `/votar?votacion_id=${vid}`;
+              }}
+              className="mt-3 w-full bg-emerald-600 hover:bg-emerald-700 px-6 py-3 rounded text-white text-lg"
+            >
+              Continuar
+            </button>
+          </div>
+        </div>
+
+        <a href="/" className="text-sm text-indigo-300 hover:text-indigo-200 underline">
+          Ir al inicio
+        </a>
+      </div>
+    );
+  }
+
+  // ===== Votación fuera de tiempo =====
+  if (!votacionActiva) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 text-white text-center space-y-4">
+        <p className="text-xl">Esta votación ha finalizado o aún no ha comenzado.</p>
+
+        {id ? (
+          <button
+            onClick={() => (window.location.href = `/resultados?votacion_id=${id}`)}
+            className="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded text-white text-lg"
+          >
+            Ver resultados de esta votación
+          </button>
+        ) : (
+          <a
+            href="/resultados"
+            className="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded text-white text-lg"
+          >
+            Ver resultados
+          </a>
+        )}
+
+        <a
+          href="/"
+          className="text-sm text-indigo-300 hover:text-indigo-200 underline mt-2"
+        >
+          Ir al inicio
+        </a>
+      </div>
+    );
+  }
+
+  // ===== Ya votó este dispositivo =====
   if (hasVoted)
     return (
       <div className="text-center p-8 text-white space-y-4">
@@ -183,14 +335,10 @@ setHasVoted(true);
       </div>
     );
 
-
+  // ===== Vista principal de votación =====
   return (
     <div className="min-h-screen pb-28 px-4 pt-6 text-white max-w-3xl mx-auto">
       <h1 className="text-3xl font-bold text-center mb-6">Vota por tu candidata 👑</h1>
-
-      <div style={{ color: '#aaa', fontSize: 12, textAlign: 'center' }}>
-        hash: {dispositivo_hash}
-      </div>
 
       <div className="grid gap-4">
         {candidatas.map((c) => {
