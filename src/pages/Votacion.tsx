@@ -53,41 +53,94 @@ function Votacion() {
   }
 
   async function startScanner() {
-    setShowScanner(true);
-    if (typeof window === 'undefined') return;
-    try {
-      const { Html5Qrcode } = await import('html5-qrcode'); // npm i html5-qrcode
-      const elementId = 'qr-reader';
+  setShowScanner(true);
+  if (typeof window === 'undefined') return;
 
-      setTimeout(async () => {
-        const html5QrCode = new Html5Qrcode(elementId);
-        const config = { fps: 10, qrbox: 250 };
-        try {
-          await html5QrCode.start(
-            { facingMode: 'environment' },
-            config,
-            (decodedText: string) => {
-              const vid = extractVotacionId(decodedText);
-              if (vid) {
-                html5QrCode.stop().then(() => {
-                  window.location.href = `/votar?votacion_id=${vid}`;
-                });
-              }
-            }
-          );
-          (window as any).__qrInstance = html5QrCode;
-        } catch (e) {
-          console.error('No se pudo iniciar la cámara/QR:', e);
-          Swal.fire('Permiso requerido', 'No se pudo acceder a la cámara.', 'warning');
-          setShowScanner(false);
+  // 1) Checks rápidos
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    Swal.fire('No compatible', 'Tu navegador no soporta cámara (getUserMedia).', 'warning');
+    setShowScanner(false);
+    return;
+  }
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    Swal.fire('Se requiere HTTPS', 'Abre la app con HTTPS para usar la cámara.', 'info');
+    setShowScanner(false);
+    return;
+  }
+
+  try {
+    // 2) Pre-permiso: forzamos el prompt de cámara con la trasera ideal
+    const preStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    });
+    // Cerramos inmediatamente (solo queremos lanzar el prompt)
+    preStream.getTracks().forEach(t => t.stop());
+
+    // 3) Elegimos la cámara trasera si es posible
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoInputs = devices.filter(d => d.kind === 'videoinput');
+    // Busca etiquetas tipo "back", "trasera"
+    const backCam =
+      videoInputs.find(d => /back|rear|trase|environment/i.test(d.label)) ||
+      videoInputs[videoInputs.length - 1]; // última como fallback
+
+    const { Html5Qrcode } = await import('html5-qrcode'); // npm i html5-qrcode
+    const elementId = 'qr-reader';
+
+    // Asegura que el contenedor exista en el DOM
+    await new Promise(r => setTimeout(r, 0));
+
+    const html5QrCode = new Html5Qrcode(elementId);
+    const config = { fps: 10, qrbox: 250 };
+
+    // 4) Preferimos deviceId si lo tenemos; si no, facingMode
+    const cameraConfig = backCam?.deviceId
+      ? { deviceId: { exact: backCam.deviceId } }
+      : { facingMode: 'environment' as const };
+
+    await html5QrCode.start(
+      cameraConfig,
+      config,
+      (decodedText: string) => {
+        const vid = extractVotacionId(decodedText);
+        if (vid) {
+          html5QrCode.stop().then(() => {
+            window.location.href = `/votar?votacion_id=${vid}`;
+          });
         }
-      }, 0);
-    } catch (e) {
-      console.error('Error cargando html5-qrcode:', e);
+      },
+      (err) => {
+        // callback de error de escaneo (ruido normal), no mostramos alerta aquí
+        // console.debug('scan error', err);
+      }
+    );
+
+    (window as any).__qrInstance = html5QrCode;
+  } catch (e: any) {
+    console.error('Scanner error:', e);
+    setShowScanner(false);
+
+    // Mensajes más útiles según el error
+    const msg = String(e?.message || e);
+    if (/Permission|NotAllowedError|denied/i.test(msg)) {
+      Swal.fire(
+        'Permiso de cámara',
+        'No hay permiso para usar la cámara. Actívalo en los ajustes del navegador para este sitio.',
+        'warning'
+      );
+    } else if (/NotFoundError|no camera|Overconstrained/i.test(msg)) {
+      Swal.fire(
+        'Cámara no encontrada',
+        'No se detectó una cámara disponible. Verifica los permisos y que el dispositivo tenga cámara.',
+        'info'
+      );
+    } else {
       Swal.fire('Error', 'No se pudo iniciar el lector QR.', 'error');
-      setShowScanner(false);
     }
   }
+}
+
 
   useEffect(() => {
     return () => {
