@@ -188,6 +188,10 @@ setHasVoted(true);
     <div className="min-h-screen pb-28 px-4 pt-6 text-white max-w-3xl mx-auto">
       <h1 className="text-3xl font-bold text-center mb-6">Vota por tu candidata 👑</h1>
 
+      <div style={{ color: '#aaa', fontSize: 12, textAlign: 'center' }}>
+        hash: {dispositivo_hash}
+      </div>
+
       <div className="grid gap-4">
         {candidatas.map((c) => {
           const esSeleccionada = seleccionada?.id === c.id;
