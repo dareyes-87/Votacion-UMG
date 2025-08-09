@@ -7,7 +7,7 @@ import HomePage from "@/pages/HomePage";
 import VotarPage from "@/pages/Votacion";
 import ResultadosPage from "@/pages/ResultadosLive";
 import CrearEventoPage from "@/pages/AdminDashboard";
-import MisVotacionesPage from "@/pages/AdminDashboard";
+import ControlAdmin from "./pages/ControlAdmin";
 
 function App() {
   return (
@@ -19,7 +19,7 @@ function App() {
             <Route path="votar" element={<VotarPage />} />
             <Route path="resultados" element={<ResultadosPage />} />
             <Route path="admin" element={<CrearEventoPage />} />
-            <Route path="mis-votaciones" element={<MisVotacionesPage />} />
+            <Route path="mis-votaciones" element={<ControlAdmin />} />
           </Route>
         </Routes>
       </AuthProvider>

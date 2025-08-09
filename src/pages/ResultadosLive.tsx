@@ -161,7 +161,6 @@ function ResultadosLive() {
 
           <div className="mt-6 text-white text-lg">
             <p>🗳️ Votos en blanco: <strong>{blancos}</strong></p>
-            <p>❌ Votos nulos: <strong>{nulos}</strong></p>
             <p className="mt-2">🧮 Total de papeletas: <strong>{totalVotos}</strong></p>
           </div>
         </div>
