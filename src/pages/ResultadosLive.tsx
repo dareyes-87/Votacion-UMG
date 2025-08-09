@@ -16,34 +16,33 @@ function ResultadosLive() {
   const [resultados, setResultados] = useState<Resultado[]>([]);
   const [blancos, setBlancos] = useState(0);
   const [nulos, setNulos] = useState(0);
-  const [maxVotos, setMaxVotos] = useState(1); // evitar división por cero
+  const [totalVotos, setTotalVotos] = useState(0);
 
   const obtenerResultados = async () => {
+    if (!votacionId) return;
 
-  if (!votacionId) return;
+    const votacionIdNumber = Number(votacionId);
+    if (isNaN(votacionIdNumber)) return;
 
-  const votacionIdNumber = Number(votacionId);
-  if (isNaN(votacionIdNumber)) return;
+    const { data: candidatas, error: errorCandidatas } = await supabase
+      .from('candidata')
+      .select('id, nombre')
+      .eq('votacion_id', votacionIdNumber);
 
-  const { data: candidatas, error: errorCandidatas } = await supabase
-    .from('candidata')
-    .select('id, nombre')
-    .eq('votacion_id', votacionIdNumber);
+    if (errorCandidatas || !candidatas) {
+      console.error('Error obteniendo candidatas:', errorCandidatas);
+      return;
+    }
 
-  if (errorCandidatas || !candidatas) {
-    console.error("Error obteniendo candidatas:", errorCandidatas);
-    return;
-  }
-
-  const resultadosConVotos = await Promise.all(
+    const resultadosConVotos = await Promise.all(
       candidatas.map(async (c) => {
         const { count, error } = await supabase
           .from('voto')
           .select('*', { count: 'exact', head: true })
-          .eq('candidata_id', c.id) // ✅ sin el filtro de votacion_id
-          .eq('votacion_id', votacionIdNumber); // ✅ Agrega esto
+          .eq('candidata_id', c.id)
+          .eq('votacion_id', votacionIdNumber);
 
-        if (error) console.error("Error contando votos:", error);
+        if (error) console.error('Error contando votos:', error);
 
         return {
           candidata_id: c.id,
@@ -53,46 +52,46 @@ function ResultadosLive() {
       })
     );
 
+    const { count: blancosCount } = await supabase
+      .from('voto')
+      .select('*', { count: 'exact', head: true })
+      .eq('voto_blanco', true)
+      .eq('votacion_id', votacionIdNumber);
 
-  const { count: blancosCount } = await supabase
-    .from('voto')
-    .select('*', { count: 'exact', head: true })
-    .eq('voto_blanco', true)
-    .eq('votacion_id', votacionIdNumber);
+    const { count: nulosCount } = await supabase
+      .from('voto')
+      .select('*', { count: 'exact', head: true })
+      .eq('voto_nulo', true)
+      .eq('votacion_id', votacionIdNumber);
 
-  const { count: nulosCount } = await supabase
-    .from('voto')
-    .select('*', { count: 'exact', head: true })
-    .eq('voto_nulo', true)
-    .eq('votacion_id', votacionIdNumber);
+    // 🔥 Total de papeletas (candidatas + blancos + nulos)
+    const total =
+      resultadosConVotos.reduce((acc, r) => acc + (r.votos || 0), 0) +
+      (blancosCount || 0) +
+      (nulosCount || 0);
 
-  const max = Math.max(
-    ...resultadosConVotos.map((r) => r.votos),
-    blancosCount || 0,
-    nulosCount || 0,
-    1
-  );
-
-  setMaxVotos(max);
-  setBlancos(blancosCount || 0);
-  setNulos(nulosCount || 0);
-  setResultados(resultadosConVotos);
-};
-
+    setResultados(resultadosConVotos);
+    setBlancos(blancosCount || 0);
+    setNulos(nulosCount || 0);
+    setTotalVotos(total);
+  };
 
   useEffect(() => {
-    console.log("Se ejecutó useEffect con votacionId:", votacionId);
-  
     obtenerResultados();
 
+    const votacionIdNumber = Number(votacionId);
     const channel = supabase
       .channel('realtime-votos')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'voto' },
-        () => {
-          obtenerResultados();
-        }
+        {
+          event: '*',
+          schema: 'public',
+          table: 'voto',
+          // 👇 evita disparos por otras votaciones
+          filter: `votacion_id=eq.${votacionIdNumber}`,
+        },
+        () => obtenerResultados()
       )
       .subscribe();
 
@@ -112,17 +111,21 @@ function ResultadosLive() {
             <div
               className="bg-gradient-to-r from-indigo-500 to-purple-600 h-6 transition-all duration-700 ease-in-out"
               style={{
-                width: `${(r.votos / maxVotos) * 100}%`,
+                width: `${totalVotos > 0 ? (r.votos / totalVotos) * 100 : 0}%`,
               }}
             />
           </div>
-          <p className="text-white">{r.votos} voto{r.votos === 1 ? '' : 's'}</p>
+          <p className="text-white">
+            {r.votos} voto{r.votos === 1 ? '' : 's'} •{' '}
+            {totalVotos > 0 ? ((r.votos / totalVotos) * 100).toFixed(1) : '0.0'}%
+          </p>
         </div>
       ))}
 
       <div className="mt-10 text-white text-lg">
         <p>🗳️ Votos en blanco: <strong>{blancos}</strong></p>
         <p>❌ Votos nulos: <strong>{nulos}</strong></p>
+        <p className="mt-2">🧮 Total de papeletas: <strong>{totalVotos}</strong></p>
       </div>
     </div>
   );
